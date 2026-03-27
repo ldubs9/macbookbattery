@@ -4,7 +4,7 @@
 ## Update management
 ## variables are used by this binary as well at the update script
 ## ###############
-BATTERY_CLI_VERSION="v1.3.4"
+BATTERY_CLI_VERSION="v1.3.5"
 
 # If a script may run as root:
 #   - Reset PATH to safe defaults at the very beginning of the script.
@@ -950,6 +950,7 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 
 		# Keep track of status
 		is_charging=$(get_smc_charging_status)
+		is_discharging=$(get_smc_discharging_status)
 		ac_attached=$(get_charger_state)
 
 		if [[ "$battery_percentage" -ge "$upper_bound" && ("$is_charging" == "enabled" || "$ac_attached" == "1") ]]; then
@@ -957,6 +958,15 @@ if [[ "$action" == "maintain_synchronous" ]]; then
 			log "Charge at or above $upper_bound%"
 			if [[ "$is_charging" == "enabled" ]]; then
 				disable_charging
+			fi
+			# Re-assert force-discharge every iteration when the flag is active.
+			# On Apple Silicon (M4 and others), reconnecting the power adapter can cause
+			# macOS firmware to silently reset the SMC discharge keys, allowing charging
+			# to resume even though we disabled it. By re-enabling discharging here we
+			# counteract that and ensure the battery stays at the target level.
+			if [[ "$subsetting" == "--force-discharge" && "$is_discharging" != "discharging" ]]; then
+				log "Re-asserting force-discharge (SMC discharge key was reset, likely by adapter reconnect)"
+				enable_discharging
 			fi
 			change_magsafe_led_color "green"
 
